@@ -1,0 +1,2 @@
+# Smart-Gate-System-with-Face-Recognition-Web-Dashboard
+Distributed IoT smart gate access control system built with ESP32-CAM and ESP32 DevKit using PlatformIO. Features local vector-based face recognition backed by persistent MicroSD storage, real-time status UI on an ST7735 LCD display, servo gate actuation, and a comprehensive central web dashboard config panel with inline live MJPEG video streaming.
