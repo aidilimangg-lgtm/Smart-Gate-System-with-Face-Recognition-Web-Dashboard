@@ -54,3 +54,52 @@ smart-gate-system/
 │   └── main_cam.cpp       # Upload to ESP32-CAM
 ├── platformio.ini         # Target configuration profile
 └── LICENSE
+
+# 🛠️ Smart Gate System Deployment Guide
+
+This document provides a step-by-step technical guide for configuring your system environment, building the firmware codebases, wiring the electronic hardware layout, and executing initial startup calibration loops.
+
+---
+
+## 📌 Prerequisites & Software Setup
+
+Before proceeding with the hardware assembly, configure your engineering workstation environment:
+
+1. **Install Visual Studio Code (VS Code):** Download and install the latest platform package version.
+2. **Install PlatformIO IDE Extension:** Inside VS Code, navigate to the Extensions Marketplace panel, search for `PlatformIO IDE`, and install it.
+3. **Download Project Assets:** Ensure the target source repository is checked out locally with the exact folder layout mapping structure specified in the project `README.md`.
+
+---
+
+## 🔌 Step 1: Electrical Hardware Assembly
+
+Wire your components together according to the schematic mapping configuration rules outlined below. 
+
+### ⚡ Critical Power Notice
+> **Important:** The integrated camera system processing unit and the continuous gate servo mechanical actuator generate significant peak electrical loads during full operation. Running all modules solely off the micro-USB connection port of your PC can cause line drops, brownouts, and looping boot faults. **Use a high-quality, external 5V regulated power brick to supply the main circuit rails.**
+
+### System Wiring Schematic Matrix
+
+```text
+       [ External 5V Power Supply ]
+           │              │
+           ├──► [5V]      ├──► [5V]
+           └──► [GND]     └──► [GND]
+                 │              │
+        ┌────────┴────────┐    ┌┴────────────────┐
+        │    ESP32-CAM    │    │  ESP32 DevKit   │
+        │                 │    │                 │
+        │  [U0TX] (GPIO1) ├───►│ (GPIO16) [RX2]  │
+        │  [U0RX] (GPIO3) ◄───┤ (GPIO17) [TX2]  │
+        └─────────────────┘    └─┬────────────┬──┘
+                                 │            │
+   ┌─────────────────────────────┘            │
+   ▼                                          ▼
+[ ST7735 1.44" LCD Screen ]             [ Gate Servo Motor ]
+  * VCC  ──► 3.3V                         * VCC    ──► External 5V
+  * GND  ──► Common GND                   * GND    ──► Common GND
+  * CS   ──► GPIO 5                       * Signal ──► GPIO 13
+  * RST  ──► GPIO 4
+  * DC   ──► GPIO 2
+  * SDA  ──► GPIO 23
+  * SCK  ──► GPIO 18
