@@ -5,7 +5,7 @@
 #include <Adafruit_ST7735.h>
 #include <Servo.h>
 
-// WiFi Settings
+// WiFi Configuration Metrics
 const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 
@@ -13,10 +13,10 @@ const char* password = "YOUR_WIFI_PASSWORD";
 #define TFT_CS    5
 #define TFT_RST   4
 #define TFT_DC    2
-#define TFT_MOSI  23 // SDA pin on screen
-#define TFT_SCLK  18 // CLK pin on screen
+#define TFT_MOSI  23 // SDA pin mapping
+#define TFT_SCLK  18 // CLK pin mapping
 
-// Pin Mapping for Servo Motor
+// Pin Mapping for Actuator Servo Motor
 #define SERVO_PIN 13
 
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
@@ -26,72 +26,85 @@ WebServer server(80);
 bool gateOpen = false;
 unsigned long gateCloseTime = 0;
 
-// Updates screen text and colors cleanly without screen burn/flicker
-void updateDisplay(String status, uint16_t color) {
+void updateDisplay(String status, String name, uint16_t color) {
     tft.fillScreen(ST7735_BLACK);
     tft.setCursor(0, 10);
     tft.setTextColor(ST7735_WHITE);
     tft.setTextSize(1);
     tft.println("--- AI SMART GATE ---");
     
-    tft.setCursor(0, 45);
+    tft.setCursor(0, 40);
     tft.setTextSize(2);
     tft.setTextColor(color);
     tft.println(status);
+
+    if (name.length() > 0) {
+        tft.setCursor(0, 105);
+        tft.setTextSize(1);
+        tft.setTextColor(ST7735_WHITE);
+        tft.print("User: ");
+        tft.setTextColor(color);
+        tft.println(name);
+    }
 }
 
-void openGate() {
-    gateServo.write(90); // Adjust mechanical opening angle if needed
+void openGate(String user) {
+    gateServo.write(90); // Mechanical gate opening sweep angle configuration
     gateOpen = true;
-    gateCloseTime = millis() + 5000; // Automatic close countdown sequence set to 5s
-    updateDisplay("FACE\nRECOGNIZED\n\nGATE OPENING", ST7735_GREEN);
+    gateCloseTime = millis() + 5000; // Hard expiration timer sequence set to 5 seconds
+    updateDisplay("GATE OPEN\n\nWELCOME!", user, ST7735_GREEN);
+    Serial.println("[SYSTEM] Gate State Matrix: OPENED BY " + user);
 }
 
 void closeGate() {
-    gateServo.write(0); // Lock positions back down to zero
+    gateServo.write(0); // Restore mechanical baseline tracking alignment
     gateOpen = false;
-    updateDisplay("SYSTEM READY\n\nSCAN FACE", ST7735_BLUE);
+    updateDisplay("SYSTEM READY\n\nSCAN FACE", "", ST7735_BLUE);
+    Serial.println("[SYSTEM] Gate State Matrix: SECURED");
 }
 
 void handleToggle() {
-    // Inject CORS headers so your browser index.html dashboard can trigger the API safely
+    // Inject Cross-Origin Resource Sharing (CORS) interface definitions
     server.sendHeader("Access-Control-Allow-Origin", "*");
     server.sendHeader("Access-Control-Allow-Headers", "*");
-    openGate();
-    server.send(200, "text/plain", "GATE_OPENING_TRIGGERED");
+    
+    // Parse dynamic named identity query parameters mapping arrays
+    String recognizedName = "ADMIN CONTROL";
+    if (server.hasArg("name")) {
+        recognizedName = server.arg("name");
+    }
+    
+    openGate(recognizedName);
+    server.send(200, "text/plain", "GATE_OPEN_SUCCESS");
 }
 
 void setup() {
     Serial.begin(115200);
-    
-    // Setup Gate Actuator
     gateServo.attach(SERVO_PIN);
     gateServo.write(0);
 
-    // Setup ST7735 Screen
     tft.initR(INITR_144GREENTAB);
-    updateDisplay("CONNECTING\nTO NETWORK...", ST7735_YELLOW);
+    updateDisplay("CONNECTING\nTO NETWORK...", "", ST7735_YELLOW);
 
-    // Setup Local WiFi Configuration Mappings
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) { 
         delay(500); 
-        Serial.print("."); 
+        Serial.print(".");
     }
     
-    Serial.println("\nWiFi Connected!");
-    
+    Serial.println("\n[NET] Control Node Stack Online IP: ");
+    Serial.println(WiFi.localIP());
+
     server.on("/toggle", HTTP_GET, handleToggle);
     server.begin();
-
-    // Display System Ready Initial Screen State 
+    
     closeGate();
 }
 
 void loop() {
     server.handleClient();
-
-    // Keep loop tracking safe to auto-close gate via non-blocking timers
+    
+    // Safety auto-recovery sequence logic checkpoints
     if (gateOpen && millis() > gateCloseTime) {
         closeGate();
     }
