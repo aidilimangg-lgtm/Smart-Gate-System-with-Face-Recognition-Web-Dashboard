@@ -1,11 +1,6 @@
 #include "esp_camera.h"
 #include <WiFi.h>
-#include "FS.h"
-#include "SD_MMC.h"
 #include "esp_http_server.h"
-#include "fb_gfx.h"
-#include "fd_forward.h"
-#include "fr_forward.h"
 
 #define CAMERA_MODEL_AI_THINKER
 #include "camera_pins.h"
@@ -13,70 +8,7 @@
 const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 
-#define ENROLL_DIR "/faces"
-static face_id_list id_list = {0};
 httpd_handle_t stream_httpd = NULL;
-
-void initSDCard() {
-    if(!SD_MMC.begin("/sdcard", true)){
-        Serial.println("SD_MMC Card Mount Failed");
-        return;
-    }
-    if(SD_MMC.cardType() == CARD_NONE){
-        Serial.println("No SD_MMC card attached");
-        return;
-    }
-    if(!SD_MMC.exists(ENROLL_DIR)){
-        SD_MMC.mkdir(ENROLL_DIR);
-    }
-}
-
-void loadFacesFromSD() {
-    int face_id = 0;
-    char path[32];
-    alloc_id_list(&id_list, 10); 
-
-    while(true) {
-        sprintf(path, "%s/face_%d.bin", ENROLL_DIR, face_id);
-        if(!SD_MMC.exists(path)) break;
-        
-        File file = SD_MMC.open(path, FILE_READ);
-        if(file) {
-            face_id_node *new_face = (face_id_node *)malloc(sizeof(face_id_node));
-            new_face->id_vec = (float *)malloc(sizeof(float) * FLASH_144_LEN);
-            file.read((uint8_t *)new_face->id_vec, sizeof(float) * FLASH_144_LEN);
-            file.close();
-            
-            new_face->next = id_list.head;
-            id_list.head = new_face;
-            id_list.count++;
-            face_id++;
-        }
-    }
-    Serial.printf("Loaded %d faces from SD Card.\n", face_id);
-}
-
-void processFaceRecognition(camera_fb_t * fb) {
-    dl_matrix3du_t *image_matrix = dl_matrix3du_alloc(1, fb->width, fb->height, 3);
-    if (!image_matrix) return;
-
-    if(!fmt2rgb888(fb->buf, fb->len, fb->format, image_matrix->item)){
-        dl_matrix3du_free(image_matrix);
-        return;
-    }
-
-    box_array_t *net_boxes = face_detect(image_matrix, &mtmn_config);
-    if (net_boxes){
-        int matched_id = recognize_face(&id_list, image_matrix, net_boxes);
-        if (matched_id >= 0) {
-            Serial.println("MATCH_FOUND");
-        }
-        free(net_boxes->box);
-        free(net_boxes->landmark);
-        free(net_boxes);
-    }
-    dl_matrix3du_free(image_matrix);
-}
 
 static esp_err_t stream_handler(httpd_req_t *req) {
     camera_fb_t * fb = NULL;
@@ -88,11 +20,11 @@ static esp_err_t stream_handler(httpd_req_t *req) {
     res = httpd_resp_set_type(req, "multipart/x-mixed-replace;boundary=123456789000000000000987654321");
     if(res != ESP_OK) return res;
 
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+
     while(true){
         fb = esp_camera_fb_get();
         if (!fb) { delay(20); continue; }
-        
-        processFaceRecognition(fb);
 
         if(fb->format != PIXFMT_JPEG){
             bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
@@ -124,7 +56,7 @@ static esp_err_t stream_handler(httpd_req_t *req) {
 
 void startCameraServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.server_port = 81;
+    config.server_port = 81; 
 
     httpd_uri_t stream_uri = {
         .uri       = "/stream",
@@ -132,8 +64,10 @@ void startCameraServer() {
         .handler   = stream_handler,
         .user_ctx  = NULL
     };
+    
     if (httpd_start(&stream_httpd, &config) == ESP_OK) {
         httpd_register_uri_handler(stream_httpd, &stream_uri);
+        Serial.println("[NET] Camera stream broadcast configuration operational.");
     }
 }
 
@@ -161,18 +95,19 @@ void setup() {
     config.pin_reset = RESET_GPIO_NUM;
     config.xclk_freq_hz = 20000000;
     config.pixel_format = PIXFMT_JPEG;
+    
     config.frame_size = FRAMESIZE_QVGA; 
-    config.jpeg_quality = 12;
+    config.jpeg_quality = 10;
     config.fb_count = 1;
 
     esp_err_t err = esp_camera_init(&config);
     if (err != ESP_OK) { return; }
 
-    initSDCard();
-    loadFacesFromSD();
-
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) { delay(500); }
+    
+    Serial.print("[NET] Camera Node Broadcast Target Endpoint: ");
+    Serial.println(WiFi.localIP());
 
     startCameraServer();
 }
