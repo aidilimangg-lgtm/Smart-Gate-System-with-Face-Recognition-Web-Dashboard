@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Premium FaceID Access Portal</title>
+    <!-- Load Neural Weights Engines Framework Libraries via CDN -->
+    <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0e1013; color: #fff; text-align: center; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+        .card { background: #181c24; border-radius: 12px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); flex: 1; min-width: 350px; border: 1px solid #222834; }
+        .video-container { position: relative; width: 400px; height: 300px; margin: 0 auto; border: 2px solid #00ff66; border-radius: 8px; overflow: hidden; background: #000; }
+        img#stream { width: 100%; height: 100%; object-fit: cover; }
+        .scan-overlay { position: absolute; top: 10%; left: 10%; width: 80%; height: 80%; border: 2px dashed rgba(0, 255, 102, 0.5); box-sizing: border-box; animation: pulse 2s infinite; pointer-events: none; }
+        @keyframes pulse { 0% { opacity: 0.2; } 50% { opacity: 0.7; } 100% { opacity: 0.2; } }
+        .btn { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-size: 15px; margin-top: 10px; transition: 0.3s; font-weight: 600; }
+        .btn:hover { background: #0056b3; }
+        .user-list { text-align: left; background: #0e1013; padding: 12px; border-radius: 6px; max-height: 150px; overflow-y: auto; border: 1px solid #222834; font-size: 14px; }
+        .status-box { font-size: 22px; font-weight: bold; margin: 15px 0; color: #00ff66; text-transform: uppercase; letter-spacing: 1px; }
+        input[type="text"] { padding: 10px; width: 80%; border-radius: 5px; border: 1px solid #333; background: #0e1013; color: white; margin-bottom: 10px; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <h1>🔮 SMART GATE ACCESS LOGIC</h1>
+    <div class="status-box" id="systemStatus">Initializing Neural Network Cores...</div>
+
+    <div class="container">
+        <!-- Live Camera Stream Layout Panel -->
+        <div class="card">
+            <h2>Live Target Capture</h2>
+            <div class="video-container">
+                <!-- Change placeholder target address configuration down to actual camera deployment location -->
+                <img id="stream" src="http://192.168.1.100:81/stream" crossorigin="anonymous">
+                <div class="scan-overlay"></div>
+            </div>
+            <button class="btn" style="background:#dc3545;" onclick="triggerManualOpen('OVERRIDE CONTROL')">🚨 Force Override Open</button>
+        </div>
+
+        <!-- Management Configurations Layout Panel -->
+        <div class="card">
+            <h2>System Data Profiling</h2>
+            <input type="text" id="username" placeholder="Type Authorized Name Entry..."><br>
+            <label style="color:#aaa; font-size:13px;">Enroll via standard Image File Input:</label><br>
+            <input type="file" id="imageUpload" accept="image/*" class="btn" style="background:#495057;"><br><br>
+            
+            <h3>Access Control Profiles (RAM Cache)</h3>
+            <div class="user-list" id="userList">System database unpopulated.</div>
+
+            <hr style="border: 0; border-top: 1px solid #222834; margin: 20px 0;">
+            <h3>Backup Interface Mappings</h3>
+            <button class="btn" style="background:#28a745;" onclick="exportDatabaseToFile()">💾 Export Database File</button>
+            <br><br>
+            <label style="color:#aaa; font-size:13px;">Reload Database Backup File:</label><br>
+            <input type="file" id="databaseImport" accept=".json" class="btn" style="background:#6c757d;" onchange="importDatabaseFromFile(event)">
+        </div>
+    </div>
+
+    <script>
+        // Update device system networking targets configurations:
+        const DEVKIT_IP = "http://192.168.1.105"; 
+        
+        let enrolledUsers = []; 
+        let faceMatcher = null;
+        let isLockoutActive = false;
+
+        window.onload = async () => {
+            const status = document.getElementById('systemStatus');
+            try {
+                const modelUrl = 'https://raw.githubusercontent.com/infamousgodhand/face-api.js-models/master/';
+                await faceapi.nets.tinyFaceDetector.loadFromUri(modelUrl);
+                await faceapi.nets.faceLandmark68Net.loadFromUri(modelUrl);
+                await faceapi.nets.faceRecognitionNet.loadFromUri(modelUrl);
+                
+                loadProfilesFromLocalStorage();
+                status.innerText = "Monitoring Biometric Input Channels...";
+                startFaceDetectionLoop();
+            } catch (err) {
+                status.innerText = "Error initializing neural frameworks.";
+                console.error(err);
+            }
+        };
+
+        async function startFaceDetectionLoop() {
+            const imgElement = document.getElementById('stream');
+            
+            setInterval(async () => {
+                if (enrolledUsers.length === 0 || !faceMatcher || isLockoutActive) return;
+
+                const detections = await faceapi.detectAllFaces(imgElement, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptors();
+                
+                if (detections.length > 0) {
+                    for (const detection of detections) {
+                        const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+                        if (bestMatch.label !== 'unknown') {
+                            document.getElementById('systemStatus').innerText = `🔓 Face Recognized: ${bestMatch.label}`;
+                            
+                            triggerManualOpen(bestMatch.label);
+                            
+                            isLockoutActive = true;
+                            setTimeout(() => { 
+                                isLockoutActive = false; 
+                                document.getElementById('systemStatus').innerText = "Monitoring Biometric Input Channels...";
+                            }, 6000);
+                            break;
+                        }
+                    }
+                }
+            }, 1000);
+        }
+
+        function registerNewUser(name, float32Descriptor) {
+            const descriptorArray = Array.from(float32Descriptor);
+            enrolledUsers.push({ name: name, descriptor: descriptorArray });
+            
+            rebuildFaceMatcher();
+            saveToLocalStorageBackup();
+            updateUserListUI();
+        }
+
+        function rebuildFaceMatcher() {
+            const labeledDescriptors = enrolledUsers.map(user => {
+                return new faceapi.LabeledFaceDescriptors(user.name, [new Float32Array(user.descriptor)]);
+            });
+            faceMatcher = new faceapi.FaceMatcher(labeledDescriptors, 0.6);
+        }
+
+        function saveToLocalStorageBackup() {
+            localStorage.setItem('gate_auth_vectors', JSON.stringify(enrolledUsers));
+        }
+
+        function loadProfilesFromLocalStorage() {
+            const saved = localStorage.getItem('gate_auth_vectors');
+            if (saved) {
+                enrolledUsers = JSON.parse(saved);
+                if(enrolledUsers.length > 0) {
+                    rebuildFaceMatcher();
+                    updateUserListUI();
+                }
+            }
+        }
+
+        function exportDatabaseToFile() {
+            if(enrolledUsers.length === 0) return alert("Database array matrix is blank.");
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(enrolledUsers));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", "gate_profiles_db.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importDatabaseFromFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    if (Array.isArray(importedData)) {
+                        enrolledUsers = importedData;
+                        rebuildFaceMatcher();
+                        saveToLocalStorageBackup();
+                        updateUserListUI();
+                        document.getElementById('systemStatus').innerText = `Imported ${enrolledUsers.length} Users successfully.`;
+                    }
+                } catch (err) {
+                    alert("Structural error processing JSON backup maps vectors.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        document.getElementById('imageUpload').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            const name = document.getElementById('username').value || "Enrolled User";
+            if (!file) return;
+
+            document.getElementById('systemStatus').innerText = "Analyzing picture vectors...";
+            const img = await faceapi.bufferToImage(file);
+            const detections = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+            
+            if (detections) {
+                registerNewUser(name, detections.descriptor);
+                document.getElementById('systemStatus').innerText = `Registered: ${name}`;
+            } else {
+                document.getElementById('systemStatus').innerText = "Failed to extract clear face mapping points.";
+                alert("No facial targets resolved. Verify image alignment.");
+            }
+            e.target.value = ""; 
+        });
+
+        function updateUserListUI() {
+            const list = document.getElementById('userList');
+            if(enrolledUsers.length === 0) {
+                list.innerHTML = "System database unpopulated.";
+                return;
+            }
+            list.innerHTML = enrolledUsers.map(u => `<div>🟢 Authorized Profile: <b>${u.name}</b></div>`).join('');
+        }
+
+        async function triggerManualOpen(name = "ADMIN CONTROL") {
+            try {
+                await fetch(`${DEVKIT_IP}/toggle?name=${encodeURIComponent(name)}`, { mode: 'no-cors' });
+            } catch (err) {
+                console.log("[NET] Request packet pushed down to targeted hardware pipeline layer.");
+            }
+        }
+    </script>
+</body>
+</html>
